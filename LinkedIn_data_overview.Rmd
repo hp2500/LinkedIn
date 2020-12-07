@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+ 
+# Setup 
+
+```{r, setup}
+wd <- "C:\\Users\\heinr\\OneDrive\\Desktop\\LARGE DATA\\LinkedIn\\Write-up"
+opts_knit$set(root.dir = wd)
+
+library(knitr)
+
+
+```
+
+# Preview Data
+
+### Individual profile descriptions
+```{r}
+read.csv(file = '../company_level_individual_profiles/24-hour-fitness_person_profile_50_word_cutoff.csv')
+```
+Individual descriptions are in company files... What about duplicates?
+
+
+### Individual employment duration by company
+```{r}
+read.csv(file = '../company_level_individual_stay_term/24-hour-fitness_person_stay_term.csv')
+```
+These are in separate files divided by company
+
+### Company metadata
+```{r}
+read.csv(file = 'company_level_info_with_grouped_sector.csv')
+```
+Everything in one file 
+
+### LIWC scores 
+```{r}
+read.csv(file = 'LIWC_idividual_company_mapped.csv', nrows = 1000)
+```
+I do not think I have the x files ... 
+x = individuals 
+y = companies
+
+
+### Company-individual LIWC similarity scores
+```{r}
+read.csv(file = 'LIWC_idividual_company_mapped_similarity.csv', nrows = 1000)
+```
+Again, I do not think I have the x files ... 
+x = individuals 
+y = companies
+
+### Company LIWC scores 
+```{r}
+read.csv(file = 'LIWC2015_Company.csv', nrows = 1000)
+```
+
+### Individual LIWC scores 
+```{r}
+read.csv(file = 'LIWC2015_Individual1.csv', nrows = 1000)
+```
+
+
+```{r}
+read.csv(file = 'LIWC2015_Individual2.csv', nrows = 1000)
+```
+
+```{r}
+read.csv(file = 'LIWC2015_Individual3.csv', nrows = 1000)
+```
+Cant find the individual files 
+Why are these in three dfs? Size?
+
+
+### Merged emplyment duration and distance metrics
+```{r}
+read.csv(file = 'stay_term_and_distances.csv', nrows = 1000)
+```
+Probably makes sense to split indices ... 
+Are person ids really unique? 
