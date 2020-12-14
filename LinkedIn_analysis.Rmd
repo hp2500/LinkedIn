@@ -4,160 +4,267 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 
 wd <- "C:\\Users\\heinr\\OneDrive\\Desktop\\LARGE DATA\\LinkedIn\\Write-up"
+knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = wd)
-
 
 library(tidyverse)
 library(lmerTest)
+source('functions.R')
 ```
 
 # Read data
-```{r}
+```{r message=FALSE, warning=FALSE}
 df_dist_liwc <- read_csv('../full_files_csv/df_dist_liwc.csv')
+df_diff_liwc <- read_csv('../full_files_csv/df_diff_liwc.csv')
 df_dist_wemb <- read_csv('../full_files_csv/df_dist_wemb.csv')
 df_stay_term <- read_csv('../full_files_csv/df_stay_term.csv')
 ```
 
-```{r}
-df_stay_term$comp_id %>% unique() %>% length()
-df_stay_term$person_id %>% unique() %>% length()
-
-df_dist_liwc_clean$comp_id  %>% unique() %>% length()
-df_dist_liwc_clean$person_id  %>% unique() %>% length()
-
-df_dist_wemb_clean$comp_id  %>% unique() %>% length()
-df_dist_wemb_clean$person_id  %>% unique() %>% length()
-
-
-length(intersect(df_stay_term$comp_id, df_dist_liwc_clean$comp_id))
-
-length(intersect(df_stay_term$comp_id, df_dist_wemb_clean$comp_id))
-
-length(intersect(df_dist_liwc_clean$comp_id, df_dist_wemb_clean$comp_id))
-
-length(intersect(df_stay_term$person_id, df_dist_liwc_clean$person_id))
-
-length(intersect(df_stay_term$person_id, df_dist_wemb_clean$person_id))
-
-length(intersect(df_dist_liwc_clean$person_id, df_dist_wemb_clean$person_id))
-
-```
-
-
 # Merge data
+### LIWC distance measures 
 ```{r}
-
-df_dist_liwc_clean <- df_dist_liwc %>% select(-X, -company, -Filename.x) %>%
-  drop_na()
-
-df_dist_wemb_clean <- df_dist_wemb %>% select(-X, -org_profile_link,
-                                              -parent_folder, -batch_folder, 
-                                              -given_name, -family_name, 
-                                              -header_title, -header_location)%>%
-  drop_na()
-
+df_dist_liwc_clean <- df_dist_liwc %>% select(-X, -company, -Filename.x)
 
 df_dist_liwc_merged <- plyr::join(df_stay_term, df_dist_liwc_clean, 
                                   by=c('comp_id', 'person_id'),
                                   type='inner')
+```
+
+### LIWC component scores
+```{r}
+df_diff_liwc_clean <- df_diff_liwc %>% select(-X, -company, -Filename.x)
+
+df_diff_liwc_merged <- plyr::join(df_stay_term, df_diff_liwc_clean, 
+                                  by=c('comp_id', 'person_id'),
+                                  type='inner')
+```
+
+### Word embedding distance measures
+```{r}
+df_dist_wemb_clean <- df_dist_wemb %>% select(-X, -org_profile_link,
+                                              -parent_folder, -batch_folder, 
+                                              -given_name, -family_name, 
+                                              -header_title, -header_location)
 
 df_dist_wemb_merged <- plyr::join(df_stay_term, df_dist_wemb_clean, 
                                   by=c('comp_id', 'person_id'),
                                   type='inner')
+```
+
+### Check for missing companies
+```{r}
+comps_liwc = df_dist_liwc %>% select(comp_id) %>% unique() %>% as.vector()
+comps_wemb = df_dist_wemb %>% select(comp_id) %>% unique() %>% as.vector()
+
+setdiff(comps_wemb, comps_liwc)
+setdiff(comps_liwc, comps_wemb)
+        
+write_csv(setdiff(comps_wemb, comps_liwc), 'liwc_missing_comps.csv')
+```
 
 
+# Further preprocessing
+### Filtering
+```{r}
 df_dist_liwc_merged_clean <- df_dist_liwc_merged %>% 
   filter(is_current_job == F) %>%
-  mutate(n_months = log(n_months)) %>%
+  mutate(n_months = log(n_months+1))
+
+df_diff_liwc_merged_clean <- df_diff_liwc_merged %>% 
+  filter(is_current_job == F) %>%
+  mutate(n_months = log(n_months+1))
+
+df_dist_wemb_merged_clean <- df_dist_wemb_merged %>% 
+  filter(is_current_job == F) %>%
+  mutate(n_months = log(n_months+1))
+```
+
+### Scaling
+```{r}
+df_dist_liwc_merged_comp <- df_dist_liwc_merged_clean %>%
   group_by(comp_id) %>%
   mutate_at(vars(n_months, cos_dist, euc_dist, manh_dist, 
                  iforest_ad, ocsvm_ad, sos_ad), scale) %>%
   ungroup()
 
-df_dist_wemb_merged_clean <- df_dist_wemb_merged %>% 
-  filter(is_current_job == F) %>%
-  mutate(n_months = log(n_months)) %>%
+df_diff_liwc_merged_comp <- df_diff_liwc_merged_clean %>%
+  group_by(comp_id) %>%
+  mutate_if(is.numeric, scale) %>%
+  ungroup()
+
+df_dist_wemb_merged_comp <- df_dist_wemb_merged_clean %>%
   group_by(comp_id) %>%
   mutate_at(vars(n_months, cos_dist, euc_dist, manh_dist,
                  iforest_ad, ocsvm_ad, sos_ad), scale) %>%
   ungroup()
-
 ```
 
+### Drop individuals with insuficient number of jobs
+```{r}
+person_ids_liwc_dist <- df_dist_liwc_merged_clean %>% 
+  group_by(person_id) %>% 
+  summarize(n = n()) %>% 
+  filter(n > 3) %>% 
+  .$person_id
 
+person_ids_liwc_diff <- df_dist_liwc_merged_clean %>% 
+  group_by(person_id) %>% 
+  summarize(n = n()) %>% 
+  filter(n > 3) %>% 
+  .$person_id
+
+person_ids_wemb <- df_dist_wemb_merged_clean %>% 
+  group_by(person_id) %>% 
+  summarize(n = n()) %>% 
+  filter(n > 3) %>% 
+  .$person_id
+```
 
 ```{r}
-run_mlm <- function(data){
-  
-  mlm_cos_dist <- lmer(n_months ~ cos_dist + (cos_dist|comp_id), 
-                     data = data)
-  
-  mlm_euc_dist <- lmer(n_months ~ euc_dist + (euc_dist|comp_id), 
-                     data = data)
-  
-  mlm_manh_dist <- lmer(n_months ~ manh_dist + (manh_dist|comp_id), 
-                     data = data)
-  
-  mlm_iforest_ad <- lmer(n_months ~ iforest_ad + (iforest_ad|comp_id), 
-                     data = data)
-  
-  mlm_ocsvm_ad <- lmer(n_months ~ ocsvm_ad + (ocsvm_ad|comp_id), 
-                     data = data)
-  
-  mlm_sos_ad <- lmer(n_months ~ sos_ad + (sos_ad|comp_id), 
-                     data = data)
-  
-  
-  # create list with results
-  results <- list('mlm_cos_dist' = mlm_cos_dist, 
-                  "mlm_euc_dist" = mlm_euc_dist,
-                  "mlm_manh_dist" = mlm_manh_dist,
-                  "mlm_iforest_ad" = mlm_iforest_ad,
-                  "mlm_ocsvm_ad" = mlm_ocsvm_ad,
-                  "mlm_sos_ad" = mlm_sos_ad)
-}
-```
+df_dist_liwc_merged_pers <- df_dist_liwc_merged_clean %>%
+  filter(person_id %in% person_ids_liwc_dist) %>%
+  group_by(person_id) %>%
+  mutate_at(vars(n_months, cos_dist, euc_dist, manh_dist,
+                 iforest_ad, ocsvm_ad, sos_ad), scale) %>%
+  ungroup()
 
+df_diff_liwc_merged_pers <- df_diff_liwc_merged_clean %>%
+  filter(person_id %in% person_ids_liwc_diff) %>%
+  group_by(person_id) %>%
+  mutate_if(is.numeric, scale) %>%
+  ungroup()
+
+df_dist_wemb_merged_pers <- df_dist_wemb_merged_clean %>%
+  filter(person_id %in% person_ids_wemb) %>%
+  group_by(person_id) %>%
+  mutate_at(vars(n_months, cos_dist, euc_dist, manh_dist,
+                 iforest_ad, ocsvm_ad, sos_ad), scale) %>%
+  ungroup()
+```
 
 ```{r}
-mlm_aggregator <- function(model_list){
+df_dist_liwc_merged_cross <- df_dist_liwc_merged_clean %>%
+  filter(person_id %in% person_ids_liwc_dist) %>%
+  mutate_at(vars(n_months, cos_dist, euc_dist, manh_dist,
+                 iforest_ad, ocsvm_ad, sos_ad), scale)
 
-  model_df <- model_list %>%
-    map(summary) %>%
-    map(coefficients) %>%
-    map(as.data.frame) %>%
-    map(rownames_to_column, 'pred') %>% 
-    bind_rows() %>% 
-    filter(str_detect(pred, 'dist|ad'))
-  
-model_df
-  
-}
+df_diff_liwc_merged_cross <- df_diff_liwc_merged_clean %>%
+  filter(person_id %in% person_ids_liwc_diff) %>%
+  mutate_if(is.numeric, scale) %>%
+  ungroup()
 
+df_dist_wemb_merged_cross <- df_dist_wemb_merged_clean %>%
+  filter(person_id %in% person_ids_wemb) %>%
+  mutate_at(vars(n_months, cos_dist, euc_dist, manh_dist,
+                 iforest_ad, ocsvm_ad, sos_ad), scale)
 ```
 
-# Fit models with LIWC data
 
+# Analysis 
+## LIWC distance metrics
+### Nested within companies
 ```{r}
-results_liwc <- run_mlm(df_dist_liwc_merged_clean)
+results_liwc_comp <- run_mlm(df_dist_liwc_merged_comp, 
+                             y = 'n_months', nesting = 'company')
+
+mlm_aggregator(results_liwc_comp)
 ```
 
-
+### Nested within person 
 ```{r}
-mlm_aggregator(results_liwc)
+results_liwc_pers <- run_mlm(df_dist_liwc_merged_pers, 
+                             y = 'n_months', nesting = 'person')
+
+mlm_aggregator(results_liwc_pers)
 ```
 
 
-# Fit models with word embedding data
+### Crossed person x company
 ```{r}
-results_wemb <- run_mlm(df_dist_wemb_merged_clean)
+# results_liwc_cross <- run_mlm(df_dist_liwc_merged_cross, 
+#                              y = 'n_months', nesting = 'crossed')
+
+# mlm_aggregator(results_liwc_cross)
 ```
 
 
+## Word embedding distance metrics
+### Nested within companies
 ```{r}
-mlm_aggregator(results_wemb)
+results_wemb_comp <- run_mlm(df_dist_wemb_merged_comp, 
+                             y = 'n_months', nesting = 'company')
+
+mlm_aggregator(results_wemb_comp)
 ```
+
+### Nested within person 
+```{r}
+results_wemb_pers <- run_mlm(df_dist_wemb_merged_pers, 
+                             y = 'n_months', nesting = 'person')
+
+mlm_aggregator(results_wemb_pers)
+```
+
+### Crossed person x company
+```{r}
+# results_wemb_cross <- run_mlm(df_dist_wemb_merged_cross, 
+#                              y = 'n_months', nesting = 'crossed')
+
+# mlm_aggregator(results_liwc_cross)
+```
+
+## LIWC component scores WORK
+### Nested within companies
+```{r}
+mlm_work_comp <- lmer(n_months ~ diff_work.x + (diff_work.x||comp_id), 
+                         data = df_diff_liwc_merged_comp)
+
+summary(mlm_work_comp)
+```
+```{r}
+mlm_work_comp <- lmer(n_months ~ abs(diff_work.x) +
+                        (abs(diff_work.x)||comp_id), 
+                         data = df_diff_liwc_merged_comp)
+
+summary(mlm_work_comp)
+```
+
+### Nested within person 
+```{r}
+mlm_work_pers <- lmer(n_months ~ diff_work.x + (diff_work.x||person_id), 
+                         data = df_diff_liwc_merged_pers)
+
+summary(mlm_work_pers)
+```
+```{r}
+mlm_work_pers <- lmer(n_months ~ abs(diff_work.x) + 
+                        (abs(diff_work.x)||person_id), 
+                         data = df_diff_liwc_merged_pers)
+
+summary(mlm_work_pers)
+```
+
+
+
+## LIWC component scores LEISURE
+### Nested within companies
+```{r}
+mlm_leisure_comp <- lmer(n_months ~ abs(diff_leisure.x) + 
+                           (abs(diff_leisure.x)||comp_id), 
+                         data = df_diff_liwc_merged_comp)
+
+summary(mlm_leisure_comp)
+```
+
+### Nested within person 
+```{r}
+mlm_leisure_pers <- lmer(n_months ~ abs(diff_leisure.x) + 
+                           (abs(diff_leisure.x)||person_id), 
+                         data = df_diff_liwc_merged_pers)
+
+summary(mlm_leisure_pers)
+```
+
 

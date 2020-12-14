@@ -9,26 +9,16 @@ knitr::opts_chunk$set(echo = TRUE)
 wd <- "C:\\Users\\heinr\\OneDrive\\Desktop\\LARGE DATA\\LinkedIn\\Write-up"
 knitr::opts_knit$set(root.dir = wd)
 
+source('functions.R')
+
 ```
 
 # List csv files
 ```{r}
 list_dist_liwc <- list.files('../company_level_individual_profiles_liwc_dist_only/')
+list_diff_liwc <- list.files('../company_level_individual_profiles_liwc_diff_only/')
 list_dist_wemb <- list.files('../company_level_individual_profiles_we_dist_only/')
 list_stay_term <- list.files('../company_level_individual_stay_term/')
-```
-
-# Define combiner function
-```{r}
-data_combiner <- function(file_list, dir, remove_str){
-
-df <- paste0(dir, file_list) %>% 
-  map(read.csv) %>% 
-  set_names(str_remove(file_list, remove_str)) %>%
-  bind_rows(.id = "comp_id")
-
-return(df)
-}
 ```
 
 # Combine LIWC distance data
@@ -38,6 +28,15 @@ df_dist_liwc <- data_combiner(list_dist_liwc,
                               '.csv')
 
 write_csv(df_dist_liwc, '../full_files_csv/df_dist_liwc.csv')
+```
+
+# Combine individual LIWC component data 
+```{r}
+df_diff_liwc <- data_combiner(list_diff_liwc, 
+                              '../company_level_individual_profiles_liwc_diff_only/', 
+                              '.csv')
+
+write_csv(df_diff_liwc, '../full_files_csv/df_diff_liwc.csv')
 ```
 
 # Combine word embedding distance data
@@ -57,12 +56,5 @@ df_stay_term <- data_combiner(list_stay_term,
 
 write_csv(df_stay_term, '../full_files_csv/df_stay_term.csv')
 ```
-
-```{r}
-
-```
-
-
-
 
 
